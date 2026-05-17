@@ -1,0 +1,1907 @@
+<!doctype html>
+<html lang="ro">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Geeli — Gestionare Piese Garanție</title>
+    <link
+      rel="icon"
+      type="image/png"
+      href="https://i.ibb.co/3DK9gMM/20260302-184545.png"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
+
+      /* ── PRINT STYLES ── */
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        body {
+          background: white !important;
+          margin: 0;
+          padding: 0;
+          color: #0f172a !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        #print-area {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: white;
+          z-index: 9999;
+          overflow: auto;
+          padding: 15mm 15mm 10mm;
+          color: #0f172a;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        #app-section,
+        #auth-section,
+        #modal-fisa {
+          display: none !important;
+        }
+      }
+
+      /* scrollbar */
+      #main-nav::-webkit-scrollbar {
+        height: 4px;
+      }
+      #main-nav::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+      }
+
+      /* toggle chip */
+      .chip-nerecuperat {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 2px solid #fca5a5;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.15s;
+      }
+      .chip-recuperat {
+        background: #dcfce7;
+        color: #166534;
+        border: 2px solid #86efac;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.15s;
+      }
+      .chip-nerecuperat:hover {
+        background: #fecaca;
+      }
+      .chip-recuperat:hover {
+        background: #bbf7d0;
+      }
+
+      /* Drag visual for piese columns */
+      .piesa-col {
+        min-height: 80px;
+      }
+
+      /* Print report area */
+      #print-area {
+        display: none;
+      }
+      @media print {
+        #print-area {
+          display: block !important;
+        }
+      }
+
+      /* Autocomplete suggestions */
+      .sug-box {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 100%;
+        background: white;
+        border: 2px solid #60a5fa;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        z-index: 200;
+        max-height: 160px;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+
+  <body class="bg-slate-900 text-slate-100">
+    <!-- ══════════════════════════════ AUTH ══════════════════════════════ -->
+    <div
+      id="auth-section"
+      class="min-h-screen flex items-center justify-center p-4 no-print"
+    >
+      <div
+        class="bg-white text-slate-900 p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-blue-600"
+      >
+        <h2
+          class="text-2xl md:text-3xl font-black mb-1 text-center italic text-blue-600 tracking-tighter uppercase"
+        >
+          Geeli Service
+        </h2>
+        <p
+          class="text-center text-[10px] font-black text-slate-400 mb-6 uppercase tracking-widest"
+        >
+          Gestionare Piese Garanție
+        </p>
+        <div id="login-form" class="space-y-4">
+          <input
+            type="text"
+            id="l-user"
+            placeholder="Utilizator"
+            class="w-full p-3 border-2 border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+          />
+          <input
+            type="password"
+            id="l-pass"
+            placeholder="Parolă"
+            class="w-full p-3 border-2 border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+          />
+          <div class="flex items-center gap-2 px-1">
+            <input
+              type="checkbox"
+              id="l-remember"
+              class="w-5 h-5 cursor-pointer"
+            />
+            <label
+              for="l-remember"
+              class="text-sm font-bold text-slate-600 cursor-pointer select-none"
+              >Salvează parola</label
+            >
+          </div>
+          <button
+            onclick="handleLogin()"
+            class="w-full bg-blue-600 text-white p-4 rounded-xl font-black hover:bg-blue-700 transition tracking-wide active:scale-95"
+          >
+            CONECTARE
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════ APP ══════════════════════════════ -->
+    <div
+      id="app-section"
+      class="hidden min-h-screen flex flex-col bg-slate-100 text-slate-900 no-print"
+    >
+      <!-- NAV BAR -->
+      <nav
+        class="bg-slate-800 text-white flex justify-between items-center shadow-lg sticky top-0 z-40 h-12 no-print"
+      >
+        <img
+          src="https://i.ibb.co/6cM58dZH/20260302-184450.png"
+          alt="Logo"
+          class="h-8 md:h-12 object-contain ml-2"
+        />
+        <div class="flex items-center gap-3">
+          <div class="text-right leading-none flex flex-col justify-center">
+            <p
+              id="nav-user-name"
+              class="font-extrabold text-[10px] md:text-sm"
+            ></p>
+            <p
+              id="nav-user-info"
+              class="text-[8px] md:text-[10px] text-blue-400 font-black uppercase tracking-widest"
+            ></p>
+          </div>
+          <button
+            onclick="handleLogout()"
+            class="bg-red-600 hover:bg-red-700 px-3 py-2 rounded-lg font-black text-[10px] md:text-xs transition"
+          >
+            IEȘIRE
+          </button>
+        </div>
+      </nav>
+
+      <!-- TAB NAV -->
+      <div
+        class="bg-white border-b-2 flex overflow-x-auto sticky top-12 z-30 shadow-sm no-scrollbar no-print"
+        id="main-nav"
+      >
+        <button
+          onclick="switchTab('tab-fise')"
+          id="btn-fise"
+          class="flex-shrink-0 px-6 md:px-8 py-4 font-black border-b-4 border-blue-600 text-blue-600 text-sm md:text-base"
+        >
+          FIȘE GARANȚIE
+        </button>
+        <button
+          onclick="switchTab('tab-gestiune')"
+          id="btn-gestiune"
+          class="flex-shrink-0 px-6 md:px-8 py-4 font-black text-slate-500 hover:text-blue-600 text-sm md:text-base"
+        >
+          GESTIONARE PIESE
+        </button>
+      </div>
+
+      <!-- MAIN CONTENT -->
+      <main class="flex-grow p-3 md:p-6">
+        <!-- ══ TAB 1: LISTA FISE GARANTIE ══ -->
+        <div id="tab-fise" class="tab-content active">
+          <!-- Search bar -->
+          <div class="flex flex-wrap gap-2 mb-4 items-center">
+            <input
+              type="text"
+              id="search-fise"
+              oninput="debounceSearch()"
+              placeholder="Caută după ID, model, VIN, client..."
+              class="flex-grow min-w-0 p-3 border-2 border-slate-300 rounded-xl shadow-sm outline-none font-semibold focus:border-blue-500 transition text-sm"
+            />
+            <select
+              id="piese-filter"
+              onchange="loadFise(1)"
+              class="p-2 border-2 border-slate-200 rounded-lg font-bold text-xs bg-white text-slate-700 outline-none"
+            >
+              <option value="toate">Toate Fișele</option>
+              <option value="cu_piese">Fișe cu Piese</option>
+              <option value="nerecuperate">Fișe Piese Nerecuperate</option>
+            </select>
+            <select
+              id="status-filter"
+              onchange="loadFise(1)"
+              class="p-2 border-2 border-slate-200 rounded-lg font-bold text-xs bg-white text-slate-700 outline-none"
+            >
+              <option value="Toate">Toate Statusurile</option>
+              <option value="În lucru">În lucru</option>
+              <option value="Finalizat">Finalizat</option>
+              <option value="Revenire">Revenire</option>
+            </select>
+            <select
+              onchange="changePageSize(this.value)"
+              class="w-20 p-2 border-2 border-slate-300 rounded-xl font-black text-xs bg-white outline-none"
+            >
+              <option value="25">25/pag.</option>
+              <option value="50" selected>50/pag.</option>
+              <option value="100">100/pag.</option>
+            </select>
+          </div>
+
+          <!-- Tabel fise -->
+          <div
+            class="bg-white rounded-2xl shadow-xl overflow-x-auto border border-slate-200"
+          >
+            <table class="w-full text-left min-w-[900px]">
+              <thead
+                class="bg-slate-800 text-white uppercase text-[10px] font-black tracking-widest"
+              >
+                <tr>
+                  <th class="p-3 border-r border-slate-600">#</th>
+                  <th class="p-3 border-r border-slate-600">ID Fișă</th>
+                  <th class="p-3 border-r border-slate-600">Categorie</th>
+                  <th class="p-3 border-r border-slate-600">Model</th>
+                  <th class="p-3 border-r border-slate-600">VIN</th>
+                  <th class="p-3 border-r border-slate-600">Status</th>
+                  <th class="p-3">Piese Nerecuperate</th>
+                </tr>
+              </thead>
+              <tbody
+                id="fise-tbody"
+                class="divide-y divide-slate-200 text-sm cursor-pointer"
+              ></tbody>
+            </table>
+          </div>
+          <div id="pagination-fise" class="mt-4"></div>
+        </div>
+        <!-- /tab-fise -->
+
+        <!-- ══ TAB 2: GESTIONARE PIESE ══ -->
+        <div id="tab-gestiune" class="tab-content">
+          <!-- ── FILTRE ── -->
+          <div
+            class="bg-white rounded-2xl shadow border border-slate-200 p-4 mb-5"
+          >
+            <h3
+              class="font-black text-slate-800 uppercase text-[10px] tracking-widest mb-3"
+            >
+              Filtre Gestionare Piese
+            </h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              <div>
+                <label
+                  class="text-[9px] font-black text-slate-500 uppercase ml-1"
+                  >Categorie</label
+                >
+                <select
+                  id="g-cat"
+                  onchange="applyFilters()"
+                  class="w-full p-2 border-2 border-slate-200 rounded-lg font-bold text-xs bg-white outline-none"
+                >
+                  <option value="">Toate categoriile</option>
+                  <option value="Bicicleta electrica">
+                    Bicicletă Electrică
+                  </option>
+                  <option value="Tricicleta electrica">
+                    Tricicletă Electrică
+                  </option>
+                  <option value="Scuter electric">Scuter Electric</option>
+                  <option value="Cvadraciclu electric">
+                    Cvadraciclu Electric
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label
+                  class="text-[9px] font-black text-slate-500 uppercase ml-1"
+                  >Model</label
+                >
+                <div class="relative">
+                  <input
+                    type="text"
+                    id="g-model"
+                    oninput="
+                      applyFilters();
+                      filterModelSug();
+                    "
+                    onblur="setTimeout(hideModelSug, 150)"
+                    placeholder="Model..."
+                    class="w-full p-2 border-2 border-slate-200 rounded-lg font-bold text-xs outline-none"
+                  />
+                  <div id="g-model-sug" class="hidden sug-box"></div>
+                </div>
+              </div>
+              <div>
+                <label
+                  class="text-[9px] font-black text-slate-500 uppercase ml-1"
+                  >Denumire Piesă</label
+                >
+                <div class="relative">
+                  <input
+                    type="text"
+                    id="g-piesa"
+                    oninput="
+                      applyFilters();
+                      filterPiesaSug();
+                    "
+                    onblur="setTimeout(hidePiesaSug, 150)"
+                    placeholder="Denumire..."
+                    class="w-full p-2 border-2 border-slate-200 rounded-lg font-bold text-xs outline-none"
+                  />
+                  <div id="g-piesa-sug" class="hidden sug-box"></div>
+                </div>
+              </div>
+              <div>
+                <label
+                  class="text-[9px] font-black text-slate-500 uppercase ml-1"
+                  >Service</label
+                >
+                <input
+                  type="text"
+                  id="g-service"
+                  oninput="applyFilters()"
+                  placeholder="Service..."
+                  class="w-full p-2 border-2 border-slate-200 rounded-lg font-bold text-xs outline-none"
+                />
+              </div>
+              <div>
+                <label
+                  class="text-[9px] font-black text-slate-500 uppercase ml-1"
+                  >Afișare</label
+                >
+                <select
+                  id="g-show"
+                  onchange="applyFilters()"
+                  class="w-full p-2 border-2 border-slate-200 rounded-lg font-bold text-xs bg-white outline-none"
+                >
+                  <option value="nerecuperate">Doar Nerecuperate</option>
+                  <option value="recuperate">Doar Recuperate</option>
+                  <option value="toate">Toate Piesele</option>
+                </select>
+              </div>
+              <div>
+                <label
+                  class="text-[9px] font-black text-slate-500 uppercase ml-1"
+                  >Perioadă De La</label
+                >
+                <input
+                  type="date"
+                  id="g-start"
+                  class="w-full p-2 border-2 border-slate-200 rounded-lg font-bold text-xs outline-none"
+                />
+              </div>
+              <div>
+                <label
+                  class="text-[9px] font-black text-slate-500 uppercase ml-1"
+                  >Perioadă Până La</label
+                >
+                <input
+                  type="date"
+                  id="g-end"
+                  class="w-full p-2 border-2 border-slate-200 rounded-lg font-bold text-xs outline-none"
+                />
+              </div>
+              <div class="flex items-end gap-2 col-span-2 md:col-span-1">
+                <button
+                  onclick="applyFilters()"
+                  class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-lg font-black text-[10px] uppercase transition active:scale-95"
+                >
+                  Filtrează
+                </button>
+                <button
+                  onclick="resetFilters()"
+                  class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 px-3 rounded-lg font-black text-[10px] uppercase transition active:scale-95"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── STATS ── -->
+          <div
+            id="gestiune-stats"
+            class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"
+          ></div>
+
+          <!-- ── EXPORT & RAPORT ── -->
+          <div
+            class="bg-white rounded-2xl shadow border border-slate-200 p-4 mb-5 flex flex-wrap gap-3 items-center"
+          >
+            <span class="text-[10px] font-black uppercase text-slate-600"
+              >Export / Raport:</span
+            >
+            <button
+              onclick="exportPieseExcel()"
+              class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-black text-xs uppercase transition active:scale-95"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="3"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+              Export Excel
+            </button>
+            <button
+              onclick="printRaport()"
+              class="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-black text-xs uppercase transition active:scale-95"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+                />
+              </svg>
+              Raport PDF / Print
+            </button>
+            <span
+              id="gestiune-count-label"
+              class="ml-auto text-[10px] font-bold text-slate-500"
+            ></span>
+          </div>
+
+          <!-- ── TABEL PIESE ── -->
+          <div
+            class="bg-white rounded-2xl shadow-xl overflow-x-auto border border-slate-200"
+          >
+            <table class="w-full text-left min-w-[900px]">
+              <thead
+                class="bg-slate-800 text-white uppercase text-[10px] font-black tracking-widest"
+              >
+                <tr>
+                  <th class="p-3 border-r border-slate-600">#</th>
+                  <th class="p-3 border-r border-slate-600">ID Fișă</th>
+                  <th class="p-3 border-r border-slate-600">Service</th>
+                  <th class="p-3 border-r border-slate-600">
+                    Categorie / Model
+                  </th>
+                  <th class="p-3 border-r border-slate-600">VIN</th>
+                  <th class="p-3 border-r border-slate-600">Piesă</th>
+                  <th class="p-3 border-r border-slate-600 text-center">
+                    Buc.
+                  </th>
+                  <th class="p-3 text-center">Status Recuperare</th>
+                </tr>
+              </thead>
+              <tbody
+                id="gestiune-tbody"
+                class="divide-y divide-slate-200 text-sm"
+              ></tbody>
+            </table>
+          </div>
+          <div id="pagination-gestiune" class="mt-4"></div>
+        </div>
+        <!-- /tab-gestiune -->
+      </main>
+    </div>
+    <!-- /app-section -->
+
+    <!-- ════════════════════════════ MODAL FISA ════════════════════════════ -->
+    <div
+      id="modal-fisa"
+      class="hidden fixed inset-0 z-50 bg-black/60 flex items-start justify-center p-2 md:p-6 overflow-y-auto no-print"
+    >
+      <div
+        class="bg-white text-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl my-4"
+      >
+        <!-- Modal header -->
+        <div
+          class="flex items-center justify-between p-4 border-b-2 border-slate-200"
+        >
+          <div>
+            <h2
+              class="font-black text-blue-700 uppercase italic text-sm md:text-base"
+            >
+              Administrare Piese Utilizate
+            </h2>
+            <p class="text-[10px] text-slate-500 font-bold uppercase mt-0.5">
+              Datele Produsului — Fișă
+              <span id="mf-id" class="text-blue-700 font-mono"></span>
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              onclick="printFisa()"
+              class="flex items-center gap-1 bg-slate-700 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-black text-[10px] uppercase transition active:scale-95"
+            >
+              <svg
+                class="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+                />
+              </svg>
+              Print/PDF
+            </button>
+            <button
+              onclick="closeModalFisa()"
+              class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase transition"
+            >
+              ✕ Închide
+            </button>
+          </div>
+        </div>
+
+        <!-- Antet fisa (identical cu app garantii) -->
+        <div id="mf-antet" class="p-4 md:p-6 border-b-2 border-slate-100">
+          <!-- filled by JS -->
+        </div>
+
+        <!-- Raport tehnic -->
+        <div id="mf-raport" class="p-4 md:p-6 border-b-2 border-slate-100">
+          <!-- filled by JS -->
+        </div>
+
+        <!-- ── SECTIUNE PIESE ADMIN ── -->
+        <div class="p-4 md:p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h4
+              class="font-black uppercase text-sm text-slate-800 border-b-2 border-slate-200 pb-1 flex-grow"
+            >
+              Administrare Piese
+            </h4>
+            <button
+              onclick="toggleEditPiese()"
+              id="btn-edit-piese"
+              class="ml-4 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-black text-[10px] uppercase transition active:scale-95"
+            >
+              ✏️ Editare Piese
+            </button>
+          </div>
+
+          <!-- VIEW MODE: 2 coloane nerecuperate / recuperate -->
+          <div id="piese-view-mode">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Nerecuperate -->
+              <div class="bg-red-50 border-2 border-red-200 rounded-xl p-3">
+                <h5
+                  class="font-black text-red-700 text-[10px] uppercase tracking-widest mb-2 border-b border-red-200 pb-1"
+                >
+                  ❌ Piese Nerecuperate
+                </h5>
+                <div id="col-nerecuperate" class="piesa-col space-y-2"></div>
+              </div>
+              <!-- Recuperate -->
+              <div class="bg-green-50 border-2 border-green-200 rounded-xl p-3">
+                <h5
+                  class="font-black text-green-700 text-[10px] uppercase tracking-widest mb-2 border-b border-green-200 pb-1"
+                >
+                  ✅ Piese Recuperate
+                </h5>
+                <div id="col-recuperate" class="piesa-col space-y-2"></div>
+              </div>
+            </div>
+            <p class="text-[9px] text-slate-400 italic mt-2 text-center">
+              Click pe o piesă pentru a schimba statusul de recuperare.
+            </p>
+          </div>
+
+          <!-- EDIT MODE: rows cu input + buc -->
+          <div id="piese-edit-mode" class="hidden">
+            <div class="bg-blue-700 p-4 rounded-2xl text-white">
+              <h4 class="font-black uppercase mb-3 text-[11px]">
+                Editare Piese Utilizate
+              </h4>
+              <div id="piese-edit-container" class="space-y-0"></div>
+              <button
+                type="button"
+                onclick="addPiesaRowEdit()"
+                id="btn-add-piesa-edit"
+                class="mt-2 flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white font-black text-[10px] px-3 py-1.5 rounded-lg transition active:scale-95 uppercase"
+              >
+                ＋ Adaugă piesă
+              </button>
+              <div class="flex gap-2 mt-4">
+                <button
+                  onclick="savePieseEdit()"
+                  class="flex-1 bg-green-500 hover:bg-green-600 py-3 rounded-xl font-black uppercase text-[10px] transition active:scale-95"
+                >
+                  💾 Salvează Piese
+                </button>
+                <button
+                  onclick="toggleEditPiese()"
+                  class="flex-1 bg-slate-600 hover:bg-slate-700 py-3 rounded-xl font-black uppercase text-[10px] transition active:scale-95"
+                >
+                  Anulează
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- /modal-fisa -->
+
+    <!-- ════════════════ ZONA PRINT (invizibila, for print only) ═══════════ -->
+    <div id="print-area"></div>
+
+    <script>
+      /* ══════════════════════════════════════════════════════════════════════
+         SUPABASE + CONSTANTS
+      ══════════════════════════════════════════════════════════════════════ */
+      const SUPA_URL = "https://chsuqecaqhnjqmmuwfhl.supabase.co";
+      const SUPA_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoc3VxZWNhcWhuanFtbXV3ZmhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NDQ4NDMsImV4cCI6MjA4ODAyMDg0M30.CRMlqol-pl3DSBSBvpm04PLkSjE9lja3c1JnKnLrWvs";
+      const _supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+      const MAX_PIESE = 12;
+
+      const PIESE_AUTO = [
+        "ACCELERATIE",
+        "ACUMULATOR 12V 100AH",
+        "ACUMULATOR 12V 12AH",
+        "ACUMULATOR 12V 14AH",
+        "ACUMULATOR 12V 20AH",
+        "ACUMULATOR 12V 32AH",
+        "ACUMULATOR 12V 45AH",
+        "ACUMULATOR 12V 58AH",
+        "ACUMULATOR 12V 62AH",
+        "ACUMULATOR 12V 80AH",
+        "ADAPTOR CONTROLLER",
+        "ADAPTOR MOTOR",
+        "AEROTERMA",
+        "AMORTIZOR FATA DREAPTA",
+        "AMORTIZOR FATA STANGA",
+        "ANVELOPA",
+        "BATERII",
+        "BOXA MARSALIER",
+        "BUTON MARSALIER",
+        "CAMERA REVERSE",
+        "CLAXON",
+        "CONTROLLER",
+        "DIFERENTIAL",
+        "DIFUZOR",
+        "DISC FRANA",
+        "DISPLAY",
+        "DISPLAY + NAVIGATIE",
+        "ETRIER DREAPTA",
+        "ETRIER STANGA",
+        "FRANA DE MANA",
+        "INCARCATOR",
+        "INVERTOR",
+        "MANETA FRANA",
+        "MANETA PEDALA",
+        "MOTOR",
+        "MOTOR STERGATOR",
+        "MUFA INCARCARE",
+        "PEDALA FRANA",
+        "PUNTE CU DIFERENTIAL",
+        "REDUCTOR",
+        "SENZOR FRANA",
+        "SENZOR PEDALA FRANA",
+        "SIGURANTA PRINCIPALA",
+        "SUPORT FURCA",
+        "TELESCOP",
+      ];
+
+      const modeleCategorii = {
+        "": [
+          "GF25",
+          "GT25",
+          "MJ1",
+          "RSIII PRO",
+          "T7",
+          "TNT5",
+          "W6",
+          "ZF6",
+          "GRAPE 25 MAX",
+          "OPTIMUS ULTRA",
+          "E-KAMYONET SKY VAN",
+          "GL35000",
+          "MOBILITY",
+          "RUZGAR",
+          "MOPED ELECTRIC GEELI UTIL 2",
+          "MT3 PRO X",
+          "BLUES",
+          "ECO RIDER MQ",
+          "GREE 08",
+          "REE1500",
+          "SWEET",
+          "ARORA S2",
+          "ARORA S1",
+          "CITY KUBA",
+        ],
+        "Bicicleta electrica": [
+          "GF25",
+          "GT25",
+          "MJ1",
+          "RSIII PRO",
+          "T7",
+          "TNT5",
+          "W6",
+          "ZF6",
+        ],
+        "Tricicleta electrica": [
+          "GRAPE 25 MAX",
+          "OPTIMUS ULTRA",
+          "E-KAMYONET SKY VAN",
+          "GL35000",
+          "MOBILITY",
+          "RUZGAR",
+        ],
+        "Scuter electric": [
+          "MOPED ELECTRIC GEELI UTIL 2",
+          "MT3 PRO X",
+          "BLUES",
+          "ECO RIDER MQ",
+          "GREE 08",
+          "REE1500",
+          "SWEET",
+        ],
+        "Cvadraciclu electric": ["ARORA S2", "ARORA S1", "CITY KUBA"],
+      };
+
+      function filterModelSug() {
+        const input = document.getElementById("g-model");
+        const sug = document.getElementById("g-model-sug");
+        if (!input || !sug) return;
+        const val = input.value.toUpperCase();
+        if (!val) {
+          sug.classList.add("hidden");
+          return;
+        }
+        const cat = document.getElementById("g-cat")?.value || "";
+        const list = modeleCategorii[cat] || modeleCategorii[""];
+        const matches = list.filter((m) => m.toUpperCase().includes(val));
+        if (!matches.length) {
+          sug.classList.add("hidden");
+          return;
+        }
+        sug.innerHTML = matches
+          .map(
+            (m) =>
+              `<div class="px-3 py-2 text-xs font-bold text-slate-900 hover:bg-blue-50 cursor-pointer uppercase"
+            onmousedown="selModelSug('${m.replace(/'/g, "\\'")}')">${m}</div>`,
+          )
+          .join("");
+        sug.classList.remove("hidden");
+      }
+      function selModelSug(val) {
+        const input = document.getElementById("g-model");
+        if (input) {
+          input.value = val;
+          applyFilters();
+        }
+        hideModelSug();
+      }
+      function hideModelSug() {
+        const s = document.getElementById("g-model-sug");
+        if (s) s.classList.add("hidden");
+      }
+
+      function filterPiesaSug() {
+        const input = document.getElementById("g-piesa");
+        const sug = document.getElementById("g-piesa-sug");
+        if (!input || !sug) return;
+        const val = input.value.toUpperCase();
+        if (!val) {
+          sug.classList.add("hidden");
+          return;
+        }
+        const matches = PIESE_AUTO.filter((p) => p.includes(val));
+        if (!matches.length) {
+          sug.classList.add("hidden");
+          return;
+        }
+        sug.innerHTML = matches
+          .map(
+            (p) =>
+              `<div class="px-3 py-2 text-xs font-bold text-slate-900 hover:bg-blue-50 cursor-pointer uppercase"
+            onmousedown="selPiesaSug('${p.replace(/'/g, "\\'")}')">${p}</div>`,
+          )
+          .join("");
+        sug.classList.remove("hidden");
+      }
+      function selPiesaSug(val) {
+        const input = document.getElementById("g-piesa");
+        if (input) {
+          input.value = val;
+          applyFilters();
+        }
+        hidePiesaSug();
+      }
+      function hidePiesaSug() {
+        const s = document.getElementById("g-piesa-sug");
+        if (s) s.classList.add("hidden");
+      }
+
+      let activeUser = null;
+      let currentFisa = null; // fisa deschisa in modal
+
+      /* ── Pagination state ── */
+      let ITEMS_PER_PAGE = 50;
+      let fisePage = 1,
+        fiseTotal = 0;
+      let gestiPage = 1,
+        gestiTotal = 0;
+
+      /* ── Filter state for tab-gestiune ── */
+      let _gestAllRows = []; // all expanded piesa-rows loaded (for client filter)
+      let _gestFiltered = []; // after filters applied
+
+      /* ── Debounce ── */
+      let _srchTimer = null;
+      function debounceSearch() {
+        clearTimeout(_srchTimer);
+        _srchTimer = setTimeout(() => loadFise(1), 350);
+      }
+
+      /* ══════════════════════════════════════════════════════════════════════
+         AUTH
+      ══════════════════════════════════════════════════════════════════════ */
+      document.addEventListener("DOMContentLoaded", () => {
+        const saved = localStorage.getItem("geeli_piese_session");
+        if (saved) {
+          const c = JSON.parse(saved);
+          handleLogin(c.u, c.p);
+        }
+        // date defaults for period filter
+        const today = new Date().toISOString().slice(0, 10);
+        const sixM = new Date();
+        sixM.setMonth(sixM.getMonth() - 6);
+        document.getElementById("g-start").value = sixM
+          .toISOString()
+          .slice(0, 10);
+        document.getElementById("g-end").value = today;
+      });
+
+      async function handleLogin(storedU = null, storedP = null) {
+        const u = (storedU || document.getElementById("l-user").value).trim();
+        const p = (storedP || document.getElementById("l-pass").value).trim();
+        const remember = document.getElementById("l-remember")?.checked;
+        if (!u || !p) return;
+
+        const { data } = await _supa
+          .from("profiles")
+          .select("*")
+          .ilike("username", u)
+          .eq("password", p)
+          .maybeSingle();
+
+        if (data) {
+          // ONLY admins allowed
+          if (data.rol !== "admin") {
+            alert(
+              "Acces restricționat. Doar administratorii pot accesa această aplicație.",
+            );
+            return;
+          }
+          activeUser = data;
+          if (remember)
+            localStorage.setItem(
+              "geeli_piese_session",
+              JSON.stringify({ u, p }),
+            );
+          document.getElementById("auth-section").classList.add("hidden");
+          document.getElementById("app-section").classList.remove("hidden");
+          document.getElementById("nav-user-name").innerText =
+            data.nume_complet;
+          document.getElementById("nav-user-info").innerText =
+            `${data.rol} | ${data.service}`;
+          loadFise(1);
+        } else {
+          if (!storedU) alert("Date incorecte!");
+          else localStorage.removeItem("geeli_piese_session");
+        }
+      }
+
+      function handleLogout() {
+        localStorage.removeItem("geeli_piese_session");
+        location.reload();
+      }
+
+      /* ══════════════════════════════════════════════════════════════════════
+         TAB SWITCHING
+      ══════════════════════════════════════════════════════════════════════ */
+      function switchTab(id) {
+        document
+          .querySelectorAll(".tab-content")
+          .forEach((t) => t.classList.remove("active"));
+        document.getElementById(id).classList.add("active");
+        document
+          .querySelectorAll("#main-nav button")
+          .forEach((b) =>
+            b.classList.remove(
+              "border-b-4",
+              "border-blue-600",
+              "text-blue-600",
+            ),
+          );
+        const btnId = id === "tab-gestiune" ? "btn-gestiune" : "btn-fise";
+        document
+          .getElementById(btnId)
+          .classList.add("border-b-4", "border-blue-600", "text-blue-600");
+        if (id === "tab-gestiune") loadGestiune();
+      }
+
+      /* ══════════════════════════════════════════════════════════════════════
+         TAB 1 — LISTA FISE GARANTIE
+      ══════════════════════════════════════════════════════════════════════ */
+      function changePageSize(v) {
+        ITEMS_PER_PAGE = parseInt(v);
+        loadFise(1);
+      }
+
+      async function loadFise(page = 1) {
+        fisePage = page;
+        const q = document.getElementById("search-fise").value.trim();
+        const statusF = document.getElementById("status-filter").value;
+        const pieseF = document.getElementById("piese-filter").value;
+
+        const tbody = document.getElementById("fise-tbody");
+        tbody.innerHTML =
+          '<tr><td colspan="7" class="p-10 text-center text-slate-400 italic font-bold">Se încarcă...</td></tr>';
+
+        let query = _supa
+          .from("fise_cu_vechime")
+          .select("*", { count: "exact" })
+          .eq("is_deleted", false)
+          .eq("tip_garantie", "In garantie");
+
+        if (statusF !== "Toate") query = query.eq("status", statusF);
+        if (q)
+          query = query.or(
+            [
+              `id.ilike.%${q}%`,
+              `marca_model.ilike.%${q}%`,
+              `vin_produs.ilike.%${q}%`,
+              `nume_client.ilike.%${q}%`,
+              `alocat_catre.ilike.%${q}%`,
+              `categorie.ilike.%${q}%`,
+            ].join(","),
+          );
+
+        const offset = (page - 1) * ITEMS_PER_PAGE;
+        const { data, count, error } = await query
+          .order("updated_at", { ascending: false })
+          .range(offset, offset + ITEMS_PER_PAGE - 1);
+
+        if (error) {
+          tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-red-500">${error.message}</td></tr>`;
+          return;
+        }
+
+        fiseTotal = count || 0;
+        tbody.innerHTML = "";
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="7" class="p-10 text-center text-slate-400 italic">Nu există fișe în garanție.</td></tr>';
+          renderPagFise(1, 0, 0);
+          return;
+        }
+
+        // Client-side filter by piese
+        const filteredData = data.filter((f) => {
+          if (pieseF === "toate") return true;
+          let hasPiesa = false,
+            hasNerecuperata = false;
+          for (let i = 1; i <= MAX_PIESE; i++) {
+            if (f[`piesa_${i}_denumire`]) {
+              hasPiesa = true;
+              if (!f[`piesa_${i}_recuperata`]) hasNerecuperata = true;
+            }
+          }
+          if (pieseF === "cu_piese") return hasPiesa;
+          if (pieseF === "nerecuperate") return hasNerecuperata;
+          return true;
+        });
+
+        if (filteredData.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="7" class="p-10 text-center text-slate-400 italic">Nu există fișe conform filtrului selectat.</td></tr>';
+          renderPagFise(1, 0, 0);
+          return;
+        }
+
+        tbody.innerHTML = filteredData
+          .map((f, i) => buildFisaRow(f, fiseTotal - offset - i))
+          .join("");
+        renderPagFise(page, Math.ceil(fiseTotal / ITEMS_PER_PAGE), fiseTotal);
+      }
+
+      function buildFisaRow(f, nr) {
+        // collect nerecuperate
+        const nerecuperate = [];
+        for (let i = 1; i <= MAX_PIESE; i++) {
+          const den = f[`piesa_${i}_denumire`];
+          const buc = f[`piesa_${i}_buc`];
+          const rec = f[`piesa_${i}_recuperata`];
+          if (den && !rec) {
+            nerecuperate.push(`${den} ×${buc || 1}`);
+          }
+        }
+
+        const statusClass =
+          f.status === "Finalizat"
+            ? "bg-green-600"
+            : f.status === "Revenire"
+              ? "bg-blue-600"
+              : "bg-amber-500";
+
+        const pieseCells =
+          nerecuperate.length > 0
+            ? nerecuperate
+                .map(
+                  (p) =>
+                    `<span class="block text-[9px] font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200 leading-tight">${p}</span>`,
+                )
+                .join("")
+            : '<span class="text-[9px] text-green-600 font-bold italic">✓ Toate recuperate</span>';
+
+        return `<tr onclick="openFisa('${f.id}')"
+          data-fisa-id="${f.id}" data-nr="${nr}"
+          class="hover:bg-blue-50 transition-colors border-b border-slate-100">
+          <td class="p-3 text-slate-400 font-black text-xs border-r border-slate-100">${nr}</td>
+          <td class="p-3 font-mono font-black text-blue-700 text-xs border-r border-slate-100">${f.id}</td>
+          <td class="p-3 text-xs font-bold text-slate-700 border-r border-slate-100">${f.categorie || "-"}</td>
+          <td class="p-3 text-xs font-bold text-slate-900 border-r border-slate-100">${f.marca_model || "-"}</td>
+          <td class="p-3 text-xs font-mono text-blue-600 font-black border-r border-slate-100">${f.vin_produs || "-"}</td>
+          <td class="p-3 border-r border-slate-100">
+            <span class="px-2 py-1 rounded-full text-[9px] font-black uppercase text-white ${statusClass}">${f.status}</span>
+          </td>
+          <td class="p-3" style="height:0">
+            <div style="max-height:52px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">${pieseCells}</div>
+          </td>
+        </tr>`;
+      }
+
+      function renderPagFise(current, total, totalItems) {
+        const c = document.getElementById("pagination-fise");
+        if (total <= 1 && totalItems <= ITEMS_PER_PAGE) {
+          c.innerHTML = "";
+          return;
+        }
+        c.className =
+          "flex flex-wrap items-center justify-between gap-3 mt-4 px-2 no-print";
+        c.innerHTML = _buildPagHTML(current, total, totalItems, "loadFise");
+      }
+
+      /* ── Open Fisa Modal ── */
+      async function openFisa(id) {
+        // Fetch fresh data from DB
+        const { data: f, error } = await _supa
+          .from("fise_cu_vechime")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+        if (error || !f) {
+          alert("Eroare la încărcarea fișei!");
+          return;
+        }
+        currentFisa = f;
+
+        document.getElementById("mf-id").textContent = f.id;
+
+        // ── Antet ──
+        document.getElementById("mf-antet").innerHTML = `
+          <div class="flex justify-between border-b-4 border-slate-900 pb-3 mb-3">
+            <div>
+              <div class="mb-1"><img src="https://i.ibb.co/DfD2pcmk/20260302-184328.png" alt="Antet" class="max-w-[130px] h-auto object-contain"></div>
+              <h1 class="text-lg font-black italic uppercase text-slate-900">Fișă Service</h1>
+              <p class="font-mono text-base text-blue-700 font-black">#${f.id}</p>
+            </div>
+            <div class="text-right">
+              <p class="font-black px-4 py-1 rounded text-white uppercase text-[10px] shadow-md mb-1 ${f.status === "Finalizat" ? "bg-green-600" : f.status === "Revenire" ? "bg-blue-600" : "bg-amber-500"}">${f.status}</p>
+              <p class="text-[10px] font-black text-slate-500">${f.tip_garantie}</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-[11px] md:text-[12px]">
+            <div class="space-y-1">
+              <h4 class="font-black border-b-2 border-slate-900 text-slate-900 uppercase text-[9px] pb-1 tracking-widest">1. Date Client</h4>
+              <p><b>NUME:</b> ${f.nume_client}</p>
+              <p><b>TEL:</b> ${f.tel_client || "-"}</p>
+              <p><b>JUDEȚ:</b> ${f.judet_client || "-"}</p>
+            </div>
+            <div class="space-y-1">
+              <h4 class="font-black border-b-2 border-slate-900 text-slate-900 uppercase text-[9px] pb-1 tracking-widest">2. Date Produs</h4>
+              <p><b>CATEGORIE:</b> ${f.categorie || "-"}</p>
+              <p><b>MODEL:</b> ${f.marca_model || "-"}</p>
+              <p><b>VIN:</b> <span class="font-mono text-blue-700 font-black">${f.vin_produs || "-"}</span></p>
+              <p><b>EMITENT FACTURĂ:</b> ${f.magazin || "-"}</p>
+              <p><b>NR. FACTURĂ:</b> ${f.nr_factura || "-"} / ${f.data_factura ? f.data_factura.split("-").reverse().join("-") : "-"}</p>
+              <p><b>KM SESIZARE:</b> ${f.km_la_sesizare != null ? f.km_la_sesizare + " km" : "-"}</p>
+              <p><b>DATA PREDARE FIZICĂ:</b> ${f.data_preluare_fizica ? f.data_preluare_fizica.split("-").reverse().join("-") : "-"}</p>
+            </div>
+          </div>
+          <div class="bg-slate-100 p-2 border-2 border-slate-200 italic mt-3 text-[11px] rounded-lg">
+            <h4 class="font-black uppercase text-[9px] mb-1 border-b border-slate-300 pb-1">3. Reclamație Client:</h4>
+            <div class="font-bold leading-relaxed whitespace-pre-wrap">${f.reclamatie_client || "-"}</div>
+          </div>
+        `;
+
+        // ── Raport tehnic ──
+        document.getElementById("mf-raport").innerHTML = `
+          <h4 class="font-black bg-slate-900 text-white px-3 py-1 text-[10px] inline-block mb-2 uppercase tracking-widest">Raport Tehnic Service</h4>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] font-black mb-3 border-b pb-2 border-slate-100">
+            <p>ALOCAT: <span class="text-blue-700">${f.alocat_catre || "-"}</span></p>
+            <p>TEHNICIAN: <span class="text-blue-700">${f.tehnician || "-"}</span></p>
+            <p>KM/ORE: <span class="text-blue-700">${f.km || "-"}/${f.ore || "-"}</span></p>
+            <p>COST: <span class="text-blue-700">${f.cost || "-"}</span></p>
+          </div>
+          <div class="p-3 border-2 border-slate-100 bg-blue-50/30 text-[11px] font-bold text-slate-900 min-h-[36px] whitespace-pre-line rounded-xl">
+            ${f.raport_reparatie ? f.raport_reparatie.trim() : "Diagnosticare în curs..."}
+          </div>
+        `;
+
+        // ── Piese view mode ──
+        document.getElementById("piese-edit-mode").classList.add("hidden");
+        document.getElementById("piese-view-mode").classList.remove("hidden");
+        document.getElementById("btn-edit-piese").textContent =
+          "✏️ Editare Piese";
+        renderPieseColumns(f);
+
+        document.getElementById("modal-fisa").classList.remove("hidden");
+      }
+
+      function renderPieseColumns(f) {
+        const colNR = document.getElementById("col-nerecuperate");
+        const colR = document.getElementById("col-recuperate");
+        colNR.innerHTML = "";
+        colR.innerHTML = "";
+
+        let hasNR = false,
+          hasR = false;
+        for (let i = 1; i <= MAX_PIESE; i++) {
+          const den = f[`piesa_${i}_denumire`];
+          const buc = f[`piesa_${i}_buc`] || 1;
+          const rec = f[`piesa_${i}_recuperata`];
+          if (!den) continue;
+
+          const chipClass = rec ? "chip-recuperat" : "chip-nerecuperat";
+          const icon = rec ? "✅" : "❌";
+          const label = rec ? "recuperată" : "nerecuperată";
+          const div = document.createElement("div");
+          div.className = `${chipClass} flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-black uppercase select-none`;
+          div.title = `Click pentru a marca ca ${rec ? "nerecuperată" : "recuperată"}`;
+          div.innerHTML = `<span>${icon}</span><span class="flex-grow">${den} <span class="font-normal normal-case">×${buc}</span></span>
+            <span class="text-[8px] font-bold opacity-60">${label}</span>`;
+          div.onclick = () => toggleRecuperare(i, !rec);
+
+          if (rec) {
+            colR.appendChild(div);
+            hasR = true;
+          } else {
+            colNR.appendChild(div);
+            hasNR = true;
+          }
+        }
+
+        if (!hasNR)
+          colNR.innerHTML =
+            '<p class="text-[10px] text-green-600 font-bold italic">Nicio piesă nerecuperată</p>';
+        if (!hasR)
+          colR.innerHTML =
+            '<p class="text-[10px] text-slate-400 font-bold italic">Nicio piesă recuperată</p>';
+      }
+
+      async function toggleRecuperare(idx, newVal) {
+        const f = currentFisa;
+        const update = {
+          [`piesa_${idx}_recuperata`]: newVal,
+          updated_at: new Date().toISOString(),
+        };
+        const { error } = await _supa
+          .from("fise")
+          .update(update)
+          .eq("id", f.id);
+        if (error) {
+          alert("Eroare: " + error.message);
+          return;
+        }
+        // update local object and re-render
+        currentFisa[`piesa_${idx}_recuperata`] = newVal;
+        renderPieseColumns(currentFisa);
+        // refresh list
+        loadFise(fisePage);
+      }
+
+      /* ── EDIT MODE piese ── */
+      let _editPiesaCount = 0;
+
+      function toggleEditPiese() {
+        const viewMode = document.getElementById("piese-view-mode");
+        const editMode = document.getElementById("piese-edit-mode");
+        const btn = document.getElementById("btn-edit-piese");
+
+        if (editMode.classList.contains("hidden")) {
+          // enter edit
+          viewMode.classList.add("hidden");
+          editMode.classList.remove("hidden");
+          btn.textContent = "👁 Vezi Status";
+          renderPieseEdit(currentFisa);
+        } else {
+          // exit edit
+          viewMode.classList.remove("hidden");
+          editMode.classList.add("hidden");
+          btn.textContent = "✏️ Editare Piese";
+          renderPieseColumns(currentFisa);
+        }
+      }
+
+      function renderPieseEdit(f) {
+        const container = document.getElementById("piese-edit-container");
+        container.innerHTML = "";
+        _editPiesaCount = 0;
+
+        for (let i = 1; i <= MAX_PIESE; i++) {
+          const den = f[`piesa_${i}_denumire`];
+          const buc = f[`piesa_${i}_buc`];
+          if (den) {
+            container.insertAdjacentHTML(
+              "beforeend",
+              _buildEditRow(i, den, buc),
+            );
+            _editPiesaCount = i;
+          }
+        }
+        // one empty row
+        if (_editPiesaCount < MAX_PIESE) {
+          const nextIdx = _editPiesaCount + 1;
+          container.insertAdjacentHTML(
+            "beforeend",
+            _buildEditRow(nextIdx, "", 1),
+          );
+        }
+      }
+
+      function _buildEditRow(idx, den, buc) {
+        return `<div id="ep-row-${idx}" class="flex items-center gap-2 mb-2 relative">
+          <div class="flex-grow relative">
+            <input type="text" id="ep-den-${idx}" value="${den || ""}" placeholder="Denumire piesă..."
+              oninput="filterPieseEdit(${idx})"
+              onblur="setTimeout(()=>hideSugEdit(${idx}),150)"
+              class="w-full p-2 rounded-lg text-slate-900 text-xs font-bold border-2 border-slate-300 focus:border-blue-400 outline-none uppercase"
+              style="text-transform:uppercase;">
+            <div id="ep-sug-${idx}" class="hidden sug-box"></div>
+          </div>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <label class="text-[9px] font-black text-white uppercase">buc.</label>
+            <input type="number" id="ep-buc-${idx}" value="${buc != null ? buc : 1}" min="1"
+              class="w-14 p-2 rounded-lg text-slate-900 text-xs font-bold border-2 border-slate-300 focus:border-blue-400 outline-none text-center">
+          </div>
+          <button onclick="removeEditRow(${idx})" type="button"
+            class="flex-shrink-0 text-red-300 hover:text-red-100 font-black text-lg leading-none" title="Șterge rândul">×</button>
+        </div>`;
+      }
+
+      function filterPieseEdit(idx) {
+        const input = document.getElementById(`ep-den-${idx}`);
+        const sug = document.getElementById(`ep-sug-${idx}`);
+        if (!input || !sug) return;
+        const val = input.value.toUpperCase();
+        if (!val) {
+          sug.classList.add("hidden");
+          return;
+        }
+        const matches = PIESE_AUTO.filter((p) => p.includes(val));
+        if (!matches.length) {
+          sug.classList.add("hidden");
+          return;
+        }
+        sug.innerHTML = matches
+          .map(
+            (p) =>
+              `<div class="px-3 py-2 text-xs font-bold text-slate-900 hover:bg-blue-50 cursor-pointer uppercase"
+            onmousedown="selPiesaEdit(${idx},'${p.replace(/'/g, "\\'")}')"> ${p}</div>`,
+          )
+          .join("");
+        sug.classList.remove("hidden");
+      }
+
+      function selPiesaEdit(idx, val) {
+        const input = document.getElementById(`ep-den-${idx}`);
+        if (input) input.value = val;
+        hideSugEdit(idx);
+      }
+
+      function hideSugEdit(idx) {
+        const s = document.getElementById(`ep-sug-${idx}`);
+        if (s) s.classList.add("hidden");
+      }
+
+      function addPiesaRowEdit() {
+        const container = document.getElementById("piese-edit-container");
+        // find current empty row index
+        let filled = 0;
+        for (let i = 1; i <= MAX_PIESE; i++) {
+          const el = document.getElementById(`ep-den-${i}`);
+          if (el && el.value.trim()) filled = i;
+        }
+        const next = filled + 1;
+        if (next > MAX_PIESE) {
+          alert(`Maxim ${MAX_PIESE} piese!`);
+          return;
+        }
+        if (document.getElementById(`ep-row-${next}`)) return;
+        const tmp = document.createElement("div");
+        tmp.innerHTML = _buildEditRow(next, "", 1);
+        container.appendChild(tmp.firstElementChild);
+        document.getElementById(`ep-den-${next}`)?.focus();
+      }
+
+      function removeEditRow(idx) {
+        const row = document.getElementById(`ep-row-${idx}`);
+        if (row) row.remove();
+      }
+
+      async function savePieseEdit() {
+        const update = { updated_at: new Date().toISOString() };
+        for (let i = 1; i <= MAX_PIESE; i++) {
+          const denEl = document.getElementById(`ep-den-${i}`);
+          const bucEl = document.getElementById(`ep-buc-${i}`);
+          update[`piesa_${i}_denumire`] = denEl
+            ? denEl.value.trim().toUpperCase() || null
+            : null;
+          update[`piesa_${i}_buc`] = bucEl ? parseInt(bucEl.value) || 1 : 1;
+          // Pastreaza valoarea recuperata existenta daca piesa exista, altfel false
+          if (!update[`piesa_${i}_denumire`]) {
+            update[`piesa_${i}_recuperata`] = false;
+          }
+          // Nu resetam recuperata daca piesa ramanea neschimbata
+        }
+
+        const { error } = await _supa
+          .from("fise")
+          .update(update)
+          .eq("id", currentFisa.id);
+        if (error) {
+          alert("Eroare: " + error.message);
+          return;
+        }
+        alert("Piese salvate cu succes!");
+        // Reload fisa from DB
+        const { data: fresh } = await _supa
+          .from("fise_cu_vechime")
+          .select("*")
+          .eq("id", currentFisa.id)
+          .maybeSingle();
+        if (fresh) currentFisa = fresh;
+        toggleEditPiese(); // back to view
+        loadFise(fisePage);
+      }
+
+      function closeModalFisa() {
+        document.getElementById("modal-fisa").classList.add("hidden");
+        currentFisa = null;
+      }
+
+      /* ── Print fisa ── */
+      function printFisa() {
+        if (!currentFisa) return;
+        const f = currentFisa;
+        // Build all piese for print
+        const pieseRows = [];
+        for (let i = 1; i <= MAX_PIESE; i++) {
+          const den = f[`piesa_${i}_denumire`];
+          const buc = f[`piesa_${i}_buc`] || 1;
+          const rec = f[`piesa_${i}_recuperata`];
+          if (den)
+            pieseRows.push(`<tr>
+            <td style="padding:4px 8px;border:1px solid #cbd5e1;">${i}</td>
+            <td style="padding:4px 8px;border:1px solid #cbd5e1;font-weight:700;text-transform:uppercase;">${den}</td>
+            <td style="padding:4px 8px;border:1px solid #cbd5e1;text-align:center;">${buc}</td>
+            <td style="padding:4px 8px;border:1px solid #cbd5e1;text-align:center;color:${rec ? "#16a34a" : "#dc2626"};font-weight:900;">${rec ? "✅ DA" : "❌ NU"}</td>
+          </tr>`);
+        }
+
+        document.getElementById("print-area").innerHTML = `
+          <style>
+            @media print { #print-area { display:block !important; } }
+            table { border-collapse: collapse; width: 100%; }
+          </style>
+          <div style="max-width:700px;margin:0 auto;font-size:12px;color:#0f172a;font-family:Inter,sans-serif;">
+            <img src="https://i.ibb.co/DfD2pcmk/20260302-184328.png" style="max-width:140px;height:auto;">
+            <div style="border-bottom:6px solid #0f172a;padding-bottom:12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-end;">
+              <div>
+                <h1 style="font-size:22px;font-weight:900;font-style:italic;text-transform:uppercase;margin:4px 0;">Fișă Service</h1>
+                <p style="font-family:monospace;font-size:16px;color:#1d4ed8;font-weight:900;margin:0;">#${f.id}</p>
+              </div>
+              <div style="background:${f.status === "Finalizat" ? "#16a34a" : f.status === "Revenire" ? "#2563eb" : "#f59e0b"};color:white;padding:4px 12px;border-radius:6px;font-weight:900;font-size:10px;text-transform:uppercase;">${f.status}</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;">
+              <div>
+                <h4 style="border-bottom:2px solid #0f172a;font-size:9px;text-transform:uppercase;font-weight:900;padding-bottom:4px;">Date Client</h4>
+                <p><b>NUME:</b> ${f.nume_client}</p>
+                <p><b>TEL:</b> ${f.tel_client || "-"}</p>
+                <p><b>JUDEȚ:</b> ${f.judet_client || "-"}</p>
+              </div>
+              <div>
+                <h4 style="border-bottom:2px solid #0f172a;font-size:9px;text-transform:uppercase;font-weight:900;padding-bottom:4px;">Date Produs</h4>
+                <p><b>CATEGORIE:</b> ${f.categorie}</p>
+                <p><b>MODEL:</b> ${f.marca_model}</p>
+                <p><b>VIN:</b> ${f.vin_produs}</p>
+                <p><b>EMITENT FACTURĂ:</b> ${f.magazin || "-"}</p>
+                <p><b>NR. FACTURĂ:</b> ${f.nr_factura || "-"}</p>
+              </div>
+            </div>
+            <div style="background:#f1f5f9;border:2px solid #e2e8f0;padding:8px;border-radius:8px;margin-bottom:12px;">
+              <h4 style="font-size:9px;text-transform:uppercase;font-weight:900;margin-bottom:4px;">Reclamație Client:</h4>
+              <p style="white-space:pre-wrap;font-style:italic;">${f.reclamatie_client || "-"}</p>
+            </div>
+            <h4 style="font-size:9px;text-transform:uppercase;font-weight:900;background:#0f172a;color:white;padding:4px 8px;display:inline-block;margin-bottom:8px;">Raport Tehnic Service</h4>
+            <p style="font-size:10px;font-weight:700;white-space:pre-wrap;min-height:30px;border:2px solid #e2e8f0;padding:8px;border-radius:8px;background:#eff6ff;">${f.raport_reparatie || "Diagnosticare în curs..."}</p>
+            ${
+              pieseRows.length
+                ? `
+            <h4 style="margin-top:16px;font-size:9px;text-transform:uppercase;font-weight:900;border-bottom:2px solid #0f172a;padding-bottom:4px;">Piese Utilizate — Status Recuperare</h4>
+            <table style="border-collapse:collapse;width:100%;margin-top:6px;">
+              <thead style="background:#0f172a;color:white;">
+                <tr>
+                  <th style="padding:4px 8px;font-size:9px;text-align:left;">#</th>
+                  <th style="padding:4px 8px;font-size:9px;text-align:left;">Denumire Piesă</th>
+                  <th style="padding:4px 8px;font-size:9px;text-align:center;">Buc.</th>
+                  <th style="padding:4px 8px;font-size:9px;text-align:center;">Recuperată</th>
+                </tr>
+              </thead>
+              <tbody>${pieseRows.join("")}</tbody>
+            </table>`
+                : ""
+            }
+          </div>`;
+        window.print();
+      }
+
+      /* ══════════════════════════════════════════════════════════════════════
+         TAB 2 — GESTIONARE PIESE
+      ══════════════════════════════════════════════════════════════════════ */
+      async function loadGestiune() {
+        document.getElementById("gestiune-tbody").innerHTML =
+          '<tr><td colspan="8" class="p-10 text-center text-slate-400 italic">Se încarcă...</td></tr>';
+
+        // Fetch ALL "In garantie" fise (without pagination — we need all for client-side filter+stats)
+        let query = _supa
+          .from("fise_cu_vechime")
+          .select("*")
+          .eq("is_deleted", false)
+          .eq("tip_garantie", "In garantie");
+
+        const { data, error } = await query.order("updated_at", {
+          ascending: false,
+        });
+        if (error) {
+          document.getElementById("gestiune-tbody").innerHTML =
+            `<tr><td colspan="8" class="p-8 text-red-500">${error.message}</td></tr>`;
+          return;
+        }
+
+        // Expand to piesa-rows
+        _gestAllRows = [];
+        (data || []).forEach((f) => {
+          for (let i = 1; i <= MAX_PIESE; i++) {
+            const den = f[`piesa_${i}_denumire`];
+            const buc = f[`piesa_${i}_buc`] || 1;
+            const rec = f[`piesa_${i}_recuperata`] || false;
+            if (!den) continue;
+            _gestAllRows.push({
+              fisa_id: f.id,
+              fisa: f,
+              piesa_idx: i,
+              denumire: den,
+              buc,
+              recuperata: rec,
+              created_at: f.created_at,
+              categorie: f.categorie || "",
+              marca_model: f.marca_model || "",
+              vin: f.vin_produs || "",
+              service: f.alocat_catre || "",
+            });
+          }
+        });
+
+        applyFilters();
+      }
+
+      function applyFilters() {
+        const cat = document.getElementById("g-cat")?.value || "";
+        const model = (
+          document.getElementById("g-model")?.value || ""
+        ).toLowerCase();
+        const piesa = (
+          document.getElementById("g-piesa")?.value || ""
+        ).toLowerCase();
+        const service = (
+          document.getElementById("g-service")?.value || ""
+        ).toLowerCase();
+        const show = document.getElementById("g-show")?.value || "nerecuperate";
+        const dStart = document.getElementById("g-start")?.value || "";
+        const dEnd = document.getElementById("g-end")?.value || "";
+
+        _gestFiltered = _gestAllRows.filter((r) => {
+          if (cat && r.categorie.toLowerCase() !== cat.toLowerCase())
+            return false;
+          if (model && !r.marca_model.toLowerCase().includes(model))
+            return false;
+          if (piesa && !r.denumire.toLowerCase().includes(piesa)) return false;
+          if (service && !r.service.toLowerCase().includes(service))
+            return false;
+          if (show === "nerecuperate" && r.recuperata) return false;
+          if (show === "recuperate" && !r.recuperata) return false;
+          // date filter on fisa created_at
+          if (dStart && r.created_at && r.created_at.slice(0, 10) < dStart)
+            return false;
+          if (dEnd && r.created_at && r.created_at.slice(0, 10) > dEnd)
+            return false;
+          return true;
+        });
+
+        renderStats();
+        renderGestiTabel(1);
+      }
+
+      function resetFilters() {
+        document.getElementById("g-cat").value = "";
+        document.getElementById("g-model").value = "";
+        document.getElementById("g-piesa").value = "";
+        document.getElementById("g-service").value = "";
+        document.getElementById("g-show").value = "nerecuperate";
+        const today = new Date().toISOString().slice(0, 10);
+        const sixM = new Date();
+        sixM.setMonth(sixM.getMonth() - 6);
+        document.getElementById("g-start").value = sixM
+          .toISOString()
+          .slice(0, 10);
+        document.getElementById("g-end").value = today;
+        applyFilters();
+      }
+
+      function renderStats() {
+        const all = _gestAllRows;
+        const totalP = all.length;
+        const totalNR = all.filter((r) => !r.recuperata).length;
+        const totalR = all.filter((r) => r.recuperata).length;
+        const fiseCuNR = new Set(
+          all.filter((r) => !r.recuperata).map((r) => r.fisa_id),
+        ).size;
+
+        document.getElementById("gestiune-stats").innerHTML = `
+          ${statCard("Total Piese", totalP, "text-blue-600", "bg-blue-50 border-blue-200")}
+          ${statCard("Nerecuperate", totalNR, "text-red-600", "bg-red-50 border-red-200")}
+          ${statCard("Recuperate", totalR, "text-green-600", "bg-green-50 border-green-200")}
+          ${statCard("Fișe cu piese NR", fiseCuNR, "text-amber-600", "bg-amber-50 border-amber-200")}
+        `;
+        document.getElementById("gestiune-count-label").textContent =
+          `Afișate ${_gestFiltered.length} intrări (din ${_gestAllRows.length} total)`;
+      }
+
+      function statCard(label, val, textClass, bgClass) {
+        return `<div class="bg-white rounded-2xl border-2 ${bgClass} p-4 flex flex-col items-center shadow">
+          <span class="text-[10px] font-black uppercase text-slate-500">${label}</span>
+          <span class="text-2xl font-black ${textClass} mt-1">${val}</span>
+        </div>`;
+      }
+
+      function renderGestiTabel(page) {
+        gestiPage = page;
+        const tbody = document.getElementById("gestiune-tbody");
+        const total = _gestFiltered.length;
+
+        if (total === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="8" class="p-10 text-center text-slate-400 italic">Nu există piese conform filtrelor aplicate.</td></tr>';
+          document.getElementById("pagination-gestiune").innerHTML = "";
+          return;
+        }
+
+        const off = (page - 1) * ITEMS_PER_PAGE;
+        const slice = _gestFiltered.slice(off, off + ITEMS_PER_PAGE);
+
+        tbody.innerHTML = slice
+          .map((r, i) => {
+            const recBadge = r.recuperata
+              ? '<span class="chip-recuperat px-2 py-1 rounded-lg text-[9px] font-black uppercase select-none" onclick="toggleGestiPiesa(this)" data-fisa="' +
+                r.fisa_id +
+                '" data-idx="' +
+                r.piesa_idx +
+                '" data-rec="true">✅ Recuperată</span>'
+              : '<span class="chip-nerecuperat px-2 py-1 rounded-lg text-[9px] font-black uppercase select-none" onclick="toggleGestiPiesa(this)" data-fisa="' +
+                r.fisa_id +
+                '" data-idx="' +
+                r.piesa_idx +
+                '" data-rec="false">❌ Nerecuperată</span>';
+            return `<tr class="hover:bg-blue-50 transition-colors">
+            <td class="p-3 text-slate-400 text-xs font-black border-r border-slate-100">${off + i + 1}</td>
+            <td class="p-3 font-mono font-black text-blue-700 text-xs border-r border-slate-100">
+              <button class="hover:underline text-blue-700" onclick="openFisa('${r.fisa_id}')">${r.fisa_id}</button>
+            </td>
+            <td class="p-3 text-[10px] font-bold text-slate-700 border-r border-slate-100">${r.service}</td>
+            <td class="p-3 text-[10px] font-bold text-slate-900 border-r border-slate-100">${r.categorie}<br><span class="text-blue-600 font-black">${r.marca_model}</span></td>
+            <td class="p-3 font-mono text-[10px] text-blue-600 font-black border-r border-slate-100">${r.vin}</td>
+            <td class="p-3 text-xs font-black uppercase text-slate-900 border-r border-slate-100">${r.denumire}</td>
+            <td class="p-3 text-center text-xs font-black border-r border-slate-100">${r.buc}</td>
+            <td class="p-3 text-center">${recBadge}</td>
+          </tr>`;
+          })
+          .join("");
+
+        const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
+        const pag = document.getElementById("pagination-gestiune");
+        if (totalPages <= 1) {
+          pag.innerHTML = "";
+          return;
+        }
+        pag.className =
+          "flex flex-wrap items-center justify-between gap-3 mt-4 px-2 no-print";
+        pag.innerHTML = _buildPagHTML(
+          page,
+          totalPages,
+          total,
+          "renderGestiTabel",
+        );
+      }
+
+      async function toggleGestiPiesa(el) {
+        const fisaId = el.dataset.fisa;
+        const idx = parseInt(el.dataset.idx);
+        const wasRec = el.dataset.rec === "true";
+        const newRec = !wasRec;
+
+        const { error } = await _supa
+          .from("fise")
+          .update({
+            [`piesa_${idx}_recuperata`]: newRec,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", fisaId);
+
+        if (error) {
+          alert("Eroare: " + error.message);
+          return;
+        }
+
+        // Update in-memory rows
+        _gestAllRows.forEach((r) => {
+          if (r.fisa_id === fisaId && r.piesa_idx === idx) {
+            r.recuperata = newRec;
+            // sync the fisa object so buildFisaRow renders correctly
+            r.fisa[`piesa_${idx}_recuperata`] = newRec;
+          }
+        });
+
+        // Update fise-tbody row instantly if fisa is visible there
+        const fisaTr = document.querySelector(
+          `#fise-tbody tr[data-fisa-id="${fisaId}"]`,
+        );
+        if (fisaTr) {
+          const fisa = _gestAllRows.find((r) => r.fisa_id === fisaId)?.fisa;
+          if (fisa) {
+            const nr = parseInt(fisaTr.dataset.nr);
+            fisaTr.outerHTML = buildFisaRow(fisa, nr);
+          }
+        }
+
+        // Optimistic UI update
+        if (newRec) {
+          el.className =
+            "chip-recuperat px-2 py-1 rounded-lg text-[9px] font-black uppercase select-none";
+          el.textContent = "✅ Recuperată";
+          el.dataset.rec = "true";
+        } else {
+          el.className =
+            "chip-nerecuperat px-2 py-1 rounded-lg text-[9px] font-black uppercase select-none";
+          el.textContent = "❌ Nerecuperată";
+          el.dataset.rec = "false";
+        }
+
+        // Re-apply filters for stats (without re-fetching DB)
+        applyFilters();
+      }
+
+      /* ── EXPORT EXCEL ── */
+      function exportPieseExcel() {
+        if (!_gestFiltered.length) {
+          alert("Nu există date de exportat!");
+          return;
+        }
+
+        const rows = _gestFiltered.map((r, i) => ({
+          "Nr. Crt": i + 1,
+          "ID Fișă": r.fisa_id,
+          Service: r.service,
+          Categorie: r.categorie,
+          Model: r.marca_model,
+          VIN: r.vin,
+          Piesă: r.denumire,
+          "Buc.": r.buc,
+          Recuperată: r.recuperata ? "DA" : "NU",
+          "Data Înregistrare": r.created_at
+            ? (() => {
+                const parts = r.created_at.substring(0, 10).split("-");
+                return `${parts[2]}-${parts[1]}-${parts[0]}`;
+              })()
+            : "",
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Piese Garantie");
+        XLSX.writeFile(
+          wb,
+          `Piese_Garantie_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        );
+      }
+
+      /* ── PRINT RAPORT ── */
+      function printRaport() {
+        if (!_gestFiltered.length) {
+          alert("Nu există date de afișat!");
+          return;
+        }
+
+        const show = document.getElementById("g-show")?.value || "nerecuperate";
+        const titlu =
+          show === "nerecuperate"
+            ? "Situație Piese NERECUPERATE"
+            : show === "recuperate"
+              ? "Situație Piese RECUPERATE"
+              : "Situație Toate Piesele";
+
+        const tableRows = _gestFiltered
+          .map(
+            (r, i) => `
+          <tr style="border-bottom:1px solid #e2e8f0;${i % 2 === 0 ? "background:#f8fafc" : ""}">
+            <td style="padding:4px 6px;">${i + 1}</td>
+            <td style="padding:4px 6px;font-family:monospace;color:#1d4ed8;font-weight:700;">${r.fisa_id}</td>
+            <td style="padding:4px 6px;font-size:10px;">${r.service}</td>
+            <td style="padding:4px 6px;font-size:10px;">${r.categorie}</td>
+            <td style="padding:4px 6px;font-size:10px;font-weight:700;">${r.marca_model}</td>
+            <td style="padding:4px 6px;font-family:monospace;font-size:10px;color:#2563eb;">${r.vin}</td>
+            <td style="padding:4px 6px;font-size:10px;font-weight:700;text-transform:uppercase;">${r.denumire}</td>
+            <td style="padding:4px 6px;text-align:center;">${r.buc}</td>
+            <td style="padding:4px 6px;text-align:center;color:${r.recuperata ? "#16a34a" : "#dc2626"};font-weight:900;">${r.recuperata ? "✅" : "❌"}</td>
+          </tr>`,
+          )
+          .join("");
+
+        document.getElementById("print-area").innerHTML = `
+          <style>
+            @media print { #print-area { display:block !important; } }
+            table { border-collapse: collapse; width: 100%; }
+          </style>
+          <div style="max-width:100%;margin:0 auto;color:#0f172a;font-family:Inter,sans-serif;font-size:11px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #0f172a;padding-bottom:10px;margin-bottom:12px;">
+              <div>
+                <img src="https://i.ibb.co/DfD2pcmk/20260302-184328.png" style="max-width:110px;height:auto;margin-bottom:4px;">
+                <h1 style="font-size:18px;font-weight:900;font-style:italic;text-transform:uppercase;">${titlu}</h1>
+                <p style="font-size:9px;color:#64748b;">Generat: ${new Date().toLocaleString("ro-RO")} | Total: ${_gestFiltered.length} piese</p>
+              </div>
+            </div>
+            <table>
+              <thead style="background:#0f172a;color:white;">
+                <tr>
+                  <th style="padding:5px 6px;text-align:left;font-size:9px;">#</th>
+                  <th style="padding:5px 6px;text-align:left;font-size:9px;">ID Fișă</th>
+                  <th style="padding:5px 6px;text-align:left;font-size:9px;">Service</th>
+                  <th style="padding:5px 6px;text-align:left;font-size:9px;">Categorie</th>
+                  <th style="padding:5px 6px;text-align:left;font-size:9px;">Model</th>
+                  <th style="padding:5px 6px;text-align:left;font-size:9px;">VIN</th>
+                  <th style="padding:5px 6px;text-align:left;font-size:9px;">Piesă</th>
+                  <th style="padding:5px 6px;text-align:center;font-size:9px;">Buc.</th>
+                  <th style="padding:5px 6px;text-align:center;font-size:9px;">Recuperată</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </div>`;
+        window.print();
+      }
+
+      /* ══════════════════════════════════════════════════════════════════════
+         SHARED HELPERS
+      ══════════════════════════════════════════════════════════════════════ */
+      function _buildPagHTML(current, total, totalItems, fnName) {
+        let pages = [];
+        if (total <= 7) {
+          for (let i = 1; i <= total; i++) pages.push(i);
+        } else {
+          pages.push(1);
+          if (current > 3) pages.push("...");
+          for (
+            let i = Math.max(2, current - 1);
+            i <= Math.min(total - 1, current + 1);
+            i++
+          )
+            pages.push(i);
+          if (current < total - 2) pages.push("...");
+          pages.push(total);
+        }
+        const start = (current - 1) * ITEMS_PER_PAGE + 1;
+        const end = Math.min(current * ITEMS_PER_PAGE, totalItems);
+
+        return `<span class="text-xs font-bold text-slate-500">Afișate <b>${start}–${end}</b> din <b>${totalItems}</b></span>
+          <div class="flex flex-wrap gap-1">
+            <button onclick="${fnName}(${current - 1})" ${current === 1 ? "disabled" : ""} class="px-3 py-1.5 rounded-lg text-xs font-black border-2 ${current === 1 ? "border-slate-200 text-slate-300 cursor-not-allowed" : "border-slate-300 text-slate-600 hover:bg-slate-100"}">← Prev</button>
+            ${pages
+              .map((p) =>
+                p === "..."
+                  ? `<span class="px-2 py-1.5 text-xs text-slate-400 font-bold self-center">…</span>`
+                  : `<button onclick="${fnName}(${p})" class="px-3 py-1.5 rounded-lg text-xs font-black border-2 transition ${p === current ? "bg-blue-600 border-blue-600 text-white shadow" : "border-slate-300 text-slate-600 hover:bg-blue-50 hover:border-blue-300"}">${p}</button>`,
+              )
+              .join("")}
+            <button onclick="${fnName}(${current + 1})" ${current === total ? "disabled" : ""} class="px-3 py-1.5 rounded-lg text-xs font-black border-2 ${current === total ? "border-slate-200 text-slate-300 cursor-not-allowed" : "border-slate-300 text-slate-600 hover:bg-slate-100"}">Next →</button>
+          </div>`;
+      }
+
+      /* ── Keyboard: Enter on login ── */
+      document.addEventListener("keydown", (e) => {
+        if (
+          e.key === "Enter" &&
+          document.getElementById("l-pass") === document.activeElement
+        ) {
+          handleLogin();
+        }
+      });
+    </script>
+  </body>
+</html>
