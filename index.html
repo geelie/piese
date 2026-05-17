@@ -1090,6 +1090,15 @@
               ? "bg-blue-600"
               : "bg-amber-500";
 
+        // check if fisa has any piese at all
+        let hasPiese = false;
+        for (let i = 1; i <= MAX_PIESE; i++) {
+          if (f[`piesa_${i}_denumire`]) {
+            hasPiese = true;
+            break;
+          }
+        }
+
         const pieseCells =
           nerecuperate.length > 0
             ? nerecuperate
@@ -1098,7 +1107,9 @@
                     `<span class="block text-[9px] font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200 leading-tight">${p}</span>`,
                 )
                 .join("")
-            : '<span class="text-[9px] text-green-600 font-bold italic">✓ Toate recuperate</span>';
+            : hasPiese
+              ? '<span class="text-[9px] text-green-600 font-bold italic">✓ Toate recuperate</span>'
+              : '<span class="text-[9px] text-slate-400 font-bold italic">— Fără piese</span>';
 
         return `<tr onclick="openFisa('${f.id}')"
           data-fisa-id="${f.id}" data-nr="${nr}"
