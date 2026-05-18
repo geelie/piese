@@ -1228,23 +1228,36 @@
           const den = f[`piesa_${i}_denumire`];
           const buc = f[`piesa_${i}_buc`] || 1;
           const rec = f[`piesa_${i}_recuperata`];
+          const dataRec = f[`piesa_${i}_data_recuperare`] || "";
           if (!den) continue;
 
           const chipClass = rec ? "chip-recuperat" : "chip-nerecuperat";
           const icon = rec ? "✅" : "❌";
           const label = rec ? "recuperată" : "nerecuperată";
+          const wrapper = document.createElement("div");
+          wrapper.className = "flex flex-col gap-1";
+
           const div = document.createElement("div");
           div.className = `${chipClass} flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-black uppercase select-none`;
           div.title = `Click pentru a marca ca ${rec ? "nerecuperată" : "recuperată"}`;
           div.innerHTML = `<span>${icon}</span><span class="flex-grow">${den} <span class="font-normal normal-case">×${buc}</span></span>
             <span class="text-[8px] font-bold opacity-60">${label}</span>`;
           div.onclick = () => toggleRecuperare(i, !rec);
+          wrapper.appendChild(div);
 
           if (rec) {
-            colR.appendChild(div);
+            // data recuperare editabila
+            const dateRow = document.createElement("div");
+            dateRow.className = "flex items-center gap-1 px-1";
+            dateRow.innerHTML = `<span class="text-[9px] font-black text-green-700 uppercase">Data rec.:</span>
+              <input type="date" value="${dataRec}" data-idx="${i}"
+                class="text-[9px] font-bold border border-green-300 rounded px-1 py-0.5 text-green-800 bg-white outline-none focus:ring-1 focus:ring-green-400 cursor-pointer"
+                onchange="saveDataRecuperare(${i}, this.value)">`;
+            wrapper.appendChild(dateRow);
+            colR.appendChild(wrapper);
             hasR = true;
           } else {
-            colNR.appendChild(div);
+            colNR.appendChild(wrapper);
             hasNR = true;
           }
         }
@@ -1259,8 +1272,10 @@
 
       async function toggleRecuperare(idx, newVal) {
         const f = currentFisa;
+        const today = new Date().toISOString().slice(0, 10);
         const update = {
           [`piesa_${idx}_recuperata`]: newVal,
+          [`piesa_${idx}_data_recuperare`]: newVal ? today : null,
           updated_at: new Date().toISOString(),
         };
         const { error } = await _supa
@@ -1273,9 +1288,22 @@
         }
         // update local object and re-render
         currentFisa[`piesa_${idx}_recuperata`] = newVal;
+        currentFisa[`piesa_${idx}_data_recuperare`] = newVal ? today : null;
         renderPieseColumns(currentFisa);
         // refresh list
         loadFise(fisePage);
+      }
+
+      async function saveDataRecuperare(idx, value) {
+        const { error } = await _supa
+          .from("fise")
+          .update({ [`piesa_${idx}_data_recuperare`]: value || null })
+          .eq("id", currentFisa.id);
+        if (error) {
+          alert("Eroare la salvarea datei: " + error.message);
+          return;
+        }
+        currentFisa[`piesa_${idx}_data_recuperare`] = value || null;
       }
 
       /* ── EDIT MODE piese ── */
@@ -1458,12 +1486,17 @@
           const den = f[`piesa_${i}_denumire`];
           const buc = f[`piesa_${i}_buc`] || 1;
           const rec = f[`piesa_${i}_recuperata`];
+          const dataRec = f[`piesa_${i}_data_recuperare`];
+          const dataRecFmt = dataRec
+            ? dataRec.slice(0, 10).split("-").reverse().join("-")
+            : "";
           if (den)
             pieseRows.push(`<tr>
             <td style="padding:4px 8px;border:1px solid #cbd5e1;">${i}</td>
             <td style="padding:4px 8px;border:1px solid #cbd5e1;font-weight:700;text-transform:uppercase;">${den}</td>
             <td style="padding:4px 8px;border:1px solid #cbd5e1;text-align:center;">${buc}</td>
             <td style="padding:4px 8px;border:1px solid #cbd5e1;text-align:center;color:${rec ? "#16a34a" : "#dc2626"};font-weight:900;">${rec ? "✅ DA" : "❌ NU"}</td>
+            <td style="padding:4px 8px;border:1px solid #cbd5e1;text-align:center;color:#166534;font-size:9px;">${dataRecFmt}</td>
           </tr>`);
         }
 
@@ -1514,6 +1547,7 @@
                   <th style="padding:4px 8px;font-size:9px;text-align:left;">Denumire Piesă</th>
                   <th style="padding:4px 8px;font-size:9px;text-align:center;">Buc.</th>
                   <th style="padding:4px 8px;font-size:9px;text-align:center;">Recuperată</th>
+                  <th style="padding:4px 8px;font-size:9px;text-align:center;">Data Recuperare</th>
                 </tr>
               </thead>
               <tbody>${pieseRows.join("")}</tbody>
@@ -1562,6 +1596,7 @@
               denumire: den,
               buc,
               recuperata: rec,
+              data_recuperare: f[`piesa_${i}_data_recuperare`] || null,
               created_at: f.created_at,
               categorie: f.categorie || "",
               marca_model: f.marca_model || "",
@@ -1670,12 +1705,20 @@
 
         tbody.innerHTML = slice
           .map((r, i) => {
+            const dataRecStr =
+              r.fisa[`piesa_${r.piesa_idx}_data_recuperare`] || "";
+            const dataRecDisplay = dataRecStr
+              ? '<div class="gesti-date-rec text-[9px] text-green-700 font-bold mt-1">📅 ' +
+                dataRecStr.slice(0, 10).split("-").reverse().join("-") +
+                "</div>"
+              : "";
             const recBadge = r.recuperata
               ? '<span class="chip-recuperat px-2 py-1 rounded-lg text-[9px] font-black uppercase select-none" onclick="toggleGestiPiesa(this)" data-fisa="' +
                 r.fisa_id +
                 '" data-idx="' +
                 r.piesa_idx +
-                '" data-rec="true">✅ Recuperată</span>'
+                '" data-rec="true">✅ Recuperată</span>' +
+                dataRecDisplay
               : '<span class="chip-nerecuperat px-2 py-1 rounded-lg text-[9px] font-black uppercase select-none" onclick="toggleGestiPiesa(this)" data-fisa="' +
                 r.fisa_id +
                 '" data-idx="' +
@@ -1717,11 +1760,13 @@
         const idx = parseInt(el.dataset.idx);
         const wasRec = el.dataset.rec === "true";
         const newRec = !wasRec;
+        const today = new Date().toISOString().slice(0, 10);
 
         const { error } = await _supa
           .from("fise")
           .update({
             [`piesa_${idx}_recuperata`]: newRec,
+            [`piesa_${idx}_data_recuperare`]: newRec ? today : null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", fisaId);
@@ -1735,8 +1780,10 @@
         _gestAllRows.forEach((r) => {
           if (r.fisa_id === fisaId && r.piesa_idx === idx) {
             r.recuperata = newRec;
+            r.data_recuperare = newRec ? today : null;
             // sync the fisa object so buildFisaRow renders correctly
             r.fisa[`piesa_${idx}_recuperata`] = newRec;
+            r.fisa[`piesa_${idx}_data_recuperare`] = newRec ? today : null;
           }
         });
 
@@ -1754,15 +1801,28 @@
 
         // Optimistic UI update
         if (newRec) {
+          const cell = el.closest("td");
           el.className =
             "chip-recuperat px-2 py-1 rounded-lg text-[9px] font-black uppercase select-none";
           el.textContent = "✅ Recuperată";
           el.dataset.rec = "true";
+          // show date below chip
+          let dateSpan = cell.querySelector(".gesti-date-rec");
+          if (!dateSpan) {
+            dateSpan = document.createElement("div");
+            dateSpan.className =
+              "gesti-date-rec text-[9px] text-green-700 font-bold mt-1";
+            cell.appendChild(dateSpan);
+          }
+          dateSpan.textContent = "📅 " + today.split("-").reverse().join("-");
         } else {
           el.className =
             "chip-nerecuperat px-2 py-1 rounded-lg text-[9px] font-black uppercase select-none";
           el.textContent = "❌ Nerecuperată";
           el.dataset.rec = "false";
+          const cell = el.closest("td");
+          const dateSpan = cell.querySelector(".gesti-date-rec");
+          if (dateSpan) dateSpan.remove();
         }
 
         // Re-apply filters for stats (without re-fetching DB)
@@ -1776,23 +1836,31 @@
           return;
         }
 
-        const rows = _gestFiltered.map((r, i) => ({
-          "Nr. Crt": i + 1,
-          "ID Fișă": r.fisa_id,
-          Service: r.service,
-          Categorie: r.categorie,
-          Model: r.marca_model,
-          VIN: r.vin,
-          Piesă: r.denumire,
-          "Buc.": r.buc,
-          Recuperată: r.recuperata ? "DA" : "NU",
-          "Data Înregistrare": r.created_at
+        const hasRecuperate = _gestFiltered.some((r) => r.recuperata);
+        const rows = _gestFiltered.map((r, i) => {
+          const row = {
+            "Nr. Crt": i + 1,
+            "ID Fișă": r.fisa_id,
+            Categorie: r.categorie,
+            Model: r.marca_model,
+            VIN: r.vin,
+            Piesă: r.denumire,
+            "Buc.": r.buc,
+            Recuperată: r.recuperata ? "DA" : "NU",
+          };
+          if (hasRecuperate) {
+            row["Data Recuperare"] = r.data_recuperare
+              ? r.data_recuperare.slice(0, 10).split("-").reverse().join("-")
+              : "-";
+          }
+          row["Data Înregistrare"] = r.created_at
             ? (() => {
                 const parts = r.created_at.substring(0, 10).split("-");
                 return `${parts[2]}-${parts[1]}-${parts[0]}`;
               })()
-            : "",
-        }));
+            : "";
+          return row;
+        });
 
         const ws = XLSX.utils.json_to_sheet(rows);
         const wb = XLSX.utils.book_new();
@@ -1824,13 +1892,13 @@
           <tr style="border-bottom:1px solid #e2e8f0;${i % 2 === 0 ? "background:#f8fafc" : ""}">
             <td style="padding:4px 6px;">${i + 1}</td>
             <td style="padding:4px 6px;font-family:monospace;color:#1d4ed8;font-weight:700;">${r.fisa_id}</td>
-            <td style="padding:4px 6px;font-size:10px;">${r.service}</td>
             <td style="padding:4px 6px;font-size:10px;">${r.categorie}</td>
             <td style="padding:4px 6px;font-size:10px;font-weight:700;">${r.marca_model}</td>
             <td style="padding:4px 6px;font-family:monospace;font-size:10px;color:#2563eb;">${r.vin}</td>
             <td style="padding:4px 6px;font-size:10px;font-weight:700;text-transform:uppercase;">${r.denumire}</td>
             <td style="padding:4px 6px;text-align:center;">${r.buc}</td>
             <td style="padding:4px 6px;text-align:center;color:${r.recuperata ? "#16a34a" : "#dc2626"};font-weight:900;">${r.recuperata ? "✅" : "❌"}</td>
+            <td style="padding:4px 6px;text-align:center;color:#166534;font-size:9px;">${r.data_recuperare ? r.data_recuperare.slice(0, 10).split("-").reverse().join("-") : ""}</td>
           </tr>`,
           )
           .join("");
@@ -1853,13 +1921,13 @@
                 <tr>
                   <th style="padding:5px 6px;text-align:left;font-size:9px;">#</th>
                   <th style="padding:5px 6px;text-align:left;font-size:9px;">ID Fișă</th>
-                  <th style="padding:5px 6px;text-align:left;font-size:9px;">Service</th>
                   <th style="padding:5px 6px;text-align:left;font-size:9px;">Categorie</th>
                   <th style="padding:5px 6px;text-align:left;font-size:9px;">Model</th>
                   <th style="padding:5px 6px;text-align:left;font-size:9px;">VIN</th>
                   <th style="padding:5px 6px;text-align:left;font-size:9px;">Piesă</th>
                   <th style="padding:5px 6px;text-align:center;font-size:9px;">Buc.</th>
                   <th style="padding:5px 6px;text-align:center;font-size:9px;">Recuperată</th>
+                  <th style="padding:5px 6px;text-align:center;font-size:9px;">Data Recuperare</th>
                 </tr>
               </thead>
               <tbody>${tableRows}</tbody>
