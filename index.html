@@ -566,6 +566,12 @@
           </div>
           <div class="flex items-center gap-2">
             <button
+              onclick="openLogModal(currentFisa && currentFisa.id)"
+              class="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg font-black text-[10px] uppercase transition active:scale-95"
+            >
+              📋 LOG
+            </button>
+            <button
               onclick="printFisa()"
               class="flex items-center gap-1 bg-slate-700 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg font-black text-[10px] uppercase transition active:scale-95"
             >
@@ -682,6 +688,46 @@
       </div>
     </div>
     <!-- /modal-fisa -->
+
+    <!-- ════════════════════════════ MODAL LOG ════════════════════════════ -->
+    <div
+      id="modal-log"
+      class="hidden fixed inset-0 z-[60] bg-black/70 flex items-start justify-center p-2 md:p-6 overflow-y-auto no-print"
+    >
+      <div
+        class="bg-white text-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl my-4"
+      >
+        <!-- Header -->
+        <div
+          class="flex items-center justify-between p-4 border-b-2 border-slate-200 bg-slate-800 rounded-t-2xl"
+        >
+          <div>
+            <h2
+              class="font-black text-white uppercase italic text-sm flex items-center gap-2"
+            >
+              <span class="text-lg">📋</span> Jurnal Activitate Piese
+            </h2>
+            <p class="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+              Fișă
+              <span id="log-fisa-id" class="text-blue-400 font-mono"></span>
+            </p>
+          </div>
+          <button
+            onclick="closeModalLog()"
+            class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-black text-[10px] uppercase transition"
+          >
+            ✕ Închide
+          </button>
+        </div>
+        <!-- Body -->
+        <div id="log-body" class="p-4 min-h-[200px]">
+          <p class="text-center text-slate-400 italic text-sm p-8">
+            Se încarcă...
+          </p>
+        </div>
+      </div>
+    </div>
+    <!-- /modal-log -->
 
     <!-- ════════════════ ZONA PRINT (invizibila, for print only) ═══════════ -->
     <div id="print-area"></div>
@@ -1247,12 +1293,17 @@
 
           if (rec) {
             // data recuperare editabila
+            const dataRecDisplay = dataRec
+              ? dataRec.split("-").reverse().join("/")
+              : "—";
             const dateRow = document.createElement("div");
             dateRow.className = "flex items-center gap-1 px-1";
             dateRow.innerHTML = `<span class="text-[9px] font-black text-green-700 uppercase">Data rec.:</span>
+              <span class="text-[9px] font-bold text-green-800">${dataRecDisplay}</span>
               <input type="date" value="${dataRec}" data-idx="${i}"
-                class="text-[9px] font-bold border border-green-300 rounded px-1 py-0.5 text-green-800 bg-white outline-none focus:ring-1 focus:ring-green-400 cursor-pointer"
-                onchange="saveDataRecuperare(${i}, this.value)">`;
+                class="text-[9px] font-bold border border-green-300 rounded px-1 py-0.5 text-green-800 bg-white outline-none focus:ring-1 focus:ring-green-400 cursor-pointer w-5 opacity-0"
+                title="Modifică data recuperare"
+                onchange="saveDataRecuperare(${i}, this.value); this.previousElementSibling.textContent = this.value ? this.value.split('-').reverse().join('/') : '—';">`;
             wrapper.appendChild(dateRow);
             colR.appendChild(wrapper);
             hasR = true;
@@ -1286,6 +1337,14 @@
           alert("Eroare: " + error.message);
           return;
         }
+        // log
+        const denPiesa = f[`piesa_${idx}_denumire`] || `Piesa #${idx}`;
+        const bucPiesa = f[`piesa_${idx}_buc`] || 1;
+        await addPiesaLog(
+          f.id,
+          newVal ? "RECUPERARE" : "ANULARE RECUPERARE",
+          `${denPiesa} ×${bucPiesa}${newVal ? ` — data: ${today.split("-").reverse().join("-")}` : ""}`,
+        );
         // update local object and re-render
         currentFisa[`piesa_${idx}_recuperata`] = newVal;
         currentFisa[`piesa_${idx}_data_recuperare`] = newVal ? today : null;
@@ -1304,6 +1363,16 @@
           return;
         }
         currentFisa[`piesa_${idx}_data_recuperare`] = value || null;
+        // log
+        const denPiesa =
+          currentFisa[`piesa_${idx}_denumire`] || `Piesa #${idx}`;
+        if (value) {
+          await addPiesaLog(
+            currentFisa.id,
+            "DATA RECUPERARE",
+            `${denPiesa} — dată modificată: ${value.split("-").reverse().join("-")}`,
+          );
+        }
       }
 
       /* ── EDIT MODE piese ── */
@@ -1459,6 +1528,22 @@
           alert("Eroare: " + error.message);
           return;
         }
+        // log
+        const pieseListEdit = [];
+        for (let i = 1; i <= MAX_PIESE; i++) {
+          if (update[`piesa_${i}_denumire`]) {
+            pieseListEdit.push(
+              `${update[`piesa_${i}_denumire`]} ×${update[`piesa_${i}_buc`]}`,
+            );
+          }
+        }
+        await addPiesaLog(
+          currentFisa.id,
+          "EDITARE PIESE",
+          pieseListEdit.length
+            ? pieseListEdit.join(", ")
+            : "Piese șterse / fișă fără piese",
+        );
         alert("Piese salvate cu succes!");
         // Reload fisa from DB
         const { data: fresh } = await _supa
@@ -1474,6 +1559,93 @@
       function closeModalFisa() {
         document.getElementById("modal-fisa").classList.add("hidden");
         currentFisa = null;
+      }
+
+      /* ══════════════════════════════════════════════════════════════════════
+         LOG PIESE — jurnal de activitate
+      ══════════════════════════════════════════════════════════════════════ */
+      async function addPiesaLog(fisaId, actiune, detalii) {
+        if (!activeUser || !fisaId) return;
+        await _supa.from("piese_log").insert({
+          fisa_id: fisaId,
+          utilizator: activeUser.nume_complet || activeUser.username || "—",
+          actiune,
+          detalii: detalii || null,
+        });
+      }
+
+      async function openLogModal(fisaId) {
+        if (!fisaId) return;
+        document.getElementById("log-fisa-id").textContent = fisaId;
+        document.getElementById("log-body").innerHTML =
+          '<p class="text-center text-slate-400 italic text-sm p-8">Se încarcă...</p>';
+        document.getElementById("modal-log").classList.remove("hidden");
+
+        const { data, error } = await _supa
+          .from("piese_log")
+          .select("*")
+          .eq("fisa_id", fisaId)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          document.getElementById("log-body").innerHTML =
+            `<p class="text-center text-red-500 font-bold p-8">Eroare: ${error.message}</p>`;
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          document.getElementById("log-body").innerHTML =
+            '<p class="text-center text-slate-400 italic text-sm p-8">Nu există activitate înregistrată pentru această fișă.</p>';
+          return;
+        }
+
+        const rows = data
+          .map((entry) => {
+            const dt = new Date(entry.created_at);
+            const dateFmt = dt.toLocaleDateString("ro-RO", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+            });
+            const timeFmt = dt.toLocaleTimeString("ro-RO", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            });
+            const actionColor =
+              entry.actiune === "RECUPERARE"
+                ? "bg-green-100 text-green-800 border-green-300"
+                : entry.actiune === "ANULARE RECUPERARE"
+                  ? "bg-red-100 text-red-800 border-red-300"
+                  : entry.actiune === "EDITARE PIESE"
+                    ? "bg-blue-100 text-blue-800 border-blue-300"
+                    : entry.actiune === "DATA RECUPERARE"
+                      ? "bg-purple-100 text-purple-800 border-purple-300"
+                      : "bg-slate-100 text-slate-800 border-slate-300";
+            return `<div class="flex items-start gap-3 py-3 border-b border-slate-100 last:border-0">
+            <div class="flex-shrink-0 w-1 self-stretch rounded-full ${entry.actiune === "RECUPERARE" ? "bg-green-500" : entry.actiune === "ANULARE RECUPERARE" ? "bg-red-500" : entry.actiune === "EDITARE PIESE" ? "bg-blue-500" : entry.actiune === "DATA RECUPERARE" ? "bg-purple-500" : "bg-slate-400"}"></div>
+            <div class="flex-grow min-w-0">
+              <div class="flex flex-wrap items-center gap-2 mb-1">
+                <span class="px-2 py-0.5 rounded border text-[9px] font-black uppercase ${actionColor}">${entry.actiune}</span>
+                <span class="text-[10px] font-black text-slate-700">👤 ${entry.utilizator}</span>
+              </div>
+              ${entry.detalii ? `<p class="text-[11px] font-bold text-slate-600 leading-snug">${entry.detalii}</p>` : ""}
+            </div>
+            <div class="flex-shrink-0 text-right">
+              <p class="text-[10px] font-black text-slate-500">${dateFmt}</p>
+              <p class="text-[9px] font-bold text-slate-400">${timeFmt}</p>
+            </div>
+          </div>`;
+          })
+          .join("");
+
+        document.getElementById("log-body").innerHTML =
+          `<div class="text-[10px] font-bold text-slate-500 mb-3 px-1">${data.length} înregistrare${data.length !== 1 ? "i" : ""} găsite</div>
+           <div class="divide-y divide-slate-100">${rows}</div>`;
+      }
+
+      function closeModalLog() {
+        document.getElementById("modal-log").classList.add("hidden");
       }
 
       /* ── Print fisa ── */
@@ -1775,6 +1947,18 @@
           alert("Eroare: " + error.message);
           return;
         }
+
+        // log (from gestiune tab — find piesa name from in-memory rows)
+        const rowForLog = _gestAllRows.find(
+          (r) => r.fisa_id === fisaId && r.piesa_idx === idx,
+        );
+        const denPiesaGesti = rowForLog ? rowForLog.denumire : `Piesa #${idx}`;
+        const bucPiesaGesti = rowForLog ? rowForLog.buc : 1;
+        await addPiesaLog(
+          fisaId,
+          newRec ? "RECUPERARE" : "ANULARE RECUPERARE",
+          `${denPiesaGesti} ×${bucPiesaGesti}${newRec ? ` — data: ${today.split("-").reverse().join("-")}` : ""} [din tab Gestionare]`,
+        );
 
         // Update in-memory rows
         _gestAllRows.forEach((r) => {
