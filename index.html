@@ -931,6 +931,8 @@
         fiseTotal = 0;
       let gestiPage = 1,
         gestiTotal = 0;
+      let _realtimeChannel = null;
+      let _pendingRefresh = false;
 
       /* ── Filter state for tab-gestiune ── */
       let _gestAllRows = []; // all expanded piesa-rows loaded (for client filter)
@@ -996,6 +998,7 @@
           document.getElementById("nav-user-info").innerText =
             `${data.rol} | ${data.service}`;
           loadFise(1);
+          _startRealtime();
         } else {
           if (!storedU) alert("Date incorecte!");
           else localStorage.removeItem("geeli_piese_session");
@@ -1003,6 +1006,7 @@
       }
 
       function handleLogout() {
+        if (_realtimeChannel) _supa.removeChannel(_realtimeChannel);
         localStorage.removeItem("geeli_piese_session");
         location.reload();
       }
@@ -1560,6 +1564,34 @@
       function closeModalFisa() {
         document.getElementById("modal-fisa").classList.add("hidden");
         currentFisa = null;
+        if (_pendingRefresh) {
+          _pendingRefresh = false;
+          loadFise(fisePage);
+        }
+      }
+
+      /* ══════════════════════════════════════════════════════════════════════
+         REALTIME — auto-refresh lista fise
+      ══════════════════════════════════════════════════════════════════════ */
+      function _startRealtime() {
+        if (_realtimeChannel) _supa.removeChannel(_realtimeChannel);
+        _realtimeChannel = _supa
+          .channel("piese-garantie-fise")
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "fise" },
+            () => {
+              const modalOpen = !document
+                .getElementById("modal-fisa")
+                .classList.contains("hidden");
+              if (modalOpen) {
+                _pendingRefresh = true;
+              } else {
+                loadFise(fisePage);
+              }
+            },
+          )
+          .subscribe();
       }
 
       /* ══════════════════════════════════════════════════════════════════════
