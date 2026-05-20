@@ -1529,6 +1529,7 @@
           return;
         }
         // log
+        const esteAdaugarePiese = !currentFisa.piesa_1_denumire;
         const pieseListEdit = [];
         for (let i = 1; i <= MAX_PIESE; i++) {
           if (update[`piesa_${i}_denumire`]) {
@@ -1539,7 +1540,7 @@
         }
         await addPiesaLog(
           currentFisa.id,
-          "EDITARE PIESE",
+          esteAdaugarePiese ? "ADAUGARE PIESE" : "EDITARE PIESE",
           pieseListEdit.length
             ? pieseListEdit.join(", ")
             : "Piese șterse / fișă fără piese",
@@ -1619,11 +1620,13 @@
                   ? "bg-red-100 text-red-800 border-red-300"
                   : entry.actiune === "EDITARE PIESE"
                     ? "bg-blue-100 text-blue-800 border-blue-300"
-                    : entry.actiune === "DATA RECUPERARE"
-                      ? "bg-purple-100 text-purple-800 border-purple-300"
-                      : "bg-slate-100 text-slate-800 border-slate-300";
+                    : entry.actiune === "ADAUGARE PIESE"
+                      ? "bg-orange-100 text-orange-800 border-orange-300"
+                      : entry.actiune === "DATA RECUPERARE"
+                        ? "bg-purple-100 text-purple-800 border-purple-300"
+                        : "bg-slate-100 text-slate-800 border-slate-300";
             return `<div class="flex items-start gap-3 py-3 border-b border-slate-100 last:border-0">
-            <div class="flex-shrink-0 w-1 self-stretch rounded-full ${entry.actiune === "RECUPERARE" ? "bg-green-500" : entry.actiune === "ANULARE RECUPERARE" ? "bg-red-500" : entry.actiune === "EDITARE PIESE" ? "bg-blue-500" : entry.actiune === "DATA RECUPERARE" ? "bg-purple-500" : "bg-slate-400"}"></div>
+            <div class="flex-shrink-0 w-1 self-stretch rounded-full ${entry.actiune === "RECUPERARE" ? "bg-green-500" : entry.actiune === "ANULARE RECUPERARE" ? "bg-red-500" : entry.actiune === "EDITARE PIESE" ? "bg-blue-500" : entry.actiune === "ADAUGARE PIESE" ? "bg-orange-500" : entry.actiune === "DATA RECUPERARE" ? "bg-purple-500" : "bg-slate-400"}"></div>
             <div class="flex-grow min-w-0">
               <div class="flex flex-wrap items-center gap-2 mb-1">
                 <span class="px-2 py-0.5 rounded border text-[9px] font-black uppercase ${actionColor}">${entry.actiune}</span>
