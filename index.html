@@ -955,6 +955,10 @@
           const c = JSON.parse(saved);
           handleLogin(c.u, c.p);
         }
+          setTimeout(() => {
+          const sf = document.getElementById("search-fise");
+          if (sf) sf.value = "";
+        }, 300);
         // date defaults for period filter
         const today = new Date().toISOString().slice(0, 10);
         const sixM = new Date();
